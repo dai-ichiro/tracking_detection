@@ -22,7 +22,7 @@ model_folder = os.path.join('experiments', 'siamrpn_r50_l234_dwxcorr')
 pth_file = os.path.join(model_folder, 'model.pth')
 
 if not os.path.isfile(pth_file):
-    download('https://drive.google.com/drive/folders/1Q4-1563iPwV6wSf_lBHDj5CPFiGSlEPG', pth_file, quiet = False)
+    download('https://drive.google.com/uc?id=1-tEtYQdT1G9kn8HsqKNDHVqjE16F8YQH', pth_file, quiet = False)
 
 target_name = [x.split('.')[0] for x in video_list]
 
