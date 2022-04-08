@@ -1,4 +1,6 @@
 import os
+import sys
+import glob
 
 import cv2
 import torch
@@ -7,18 +9,37 @@ from pysot.core.config import cfg
 from pysot.models.model_builder import ModelBuilder
 from pysot.tracker.tracker_builder import build_tracker
 
-from torchvision.datasets.utils import download_url
+from gdown import download
+model_folder = os.path.join('experiments', 'siamrpn_r50_l234_dwxcorr')
+pth_file = os.path.join(model_folder, 'model.pth')
 
-#=========================================================
-video_list = ['target.mp4', 'green.mp4']
+if not os.path.isfile(pth_file):
+    download('https://drive.google.com/uc?id=1-tEtYQdT1G9kn8HsqKNDHVqjE16F8YQH', pth_file, quiet = False)
 
-url_1 = 'https://github.com/dai-ichiro/robo-one/raw/main/video_1.mp4'
-url_2 = 'https://github.com/dai-ichiro/robo-one/raw/main/video_2.mp4'
+argv_list = sys.argv
+del argv_list[0]
 
-download_url(url_1, root = '.', filename = video_list[0])
-download_url(url_2, root = '.', filename = video_list[1])
+class_num = len(sys.argv)
 
-target_name = [x.split('.')[0] for x in video_list]
+print('class count = %d'%class_num)
+
+video_list = []
+target_name = []
+
+for i, each_class in enumerate(argv_list):
+    if os.path.isdir(each_class):
+        classname_without_ext = os.path.basename(each_class)
+        print('name of class%d: %s'%(i, classname_without_ext))
+        target_name.append(classname_without_ext)
+        video_list.append(glob.glob(os.path.join(each_class, '*')))
+    else:
+        classname_without_ext = os.path.splitext(os.path.basename(each_class))[0]
+        print('name of class%d: %s'%(i, classname_without_ext))
+        target_name.append(classname_without_ext)
+        video_list.append([each_class])
+
+for i, video in enumerate(video_list):
+    print('video of class%d: '%i + ','.join(video))
 
 out_path = 'train_data'
 
@@ -34,17 +55,21 @@ os.makedirs(train_labels_dir)
 
 init_rect_list = []
 
-for video in video_list:
-    cap = cv2.VideoCapture(video)
-    ret, img = cap.read()
-    cap.release()
+for videos in video_list:
+    init_rect_list_each_class = []
+    for video in videos:
 
-    source_window = "draw_rectangle"
-    cv2.namedWindow(source_window)
-    rect = cv2.selectROI(source_window, img, False, False)
+        cap = cv2.VideoCapture(video)
+        ret, img = cap.read()
+        cap.release()
 
-    init_rect_list.append(rect)
-    cv2.destroyAllWindows()
+        source_window = "draw_rectangle"
+        cv2.namedWindow(source_window)
+        rect = cv2.selectROI(source_window, img, False, False)
+
+        init_rect_list_each_class.append(rect)
+        cv2.destroyAllWindows()
+    init_rect_list.append(init_rect_list_each_class)
 
 # モデルを取得する
 cfg.merge_from_file(config)
@@ -56,44 +81,43 @@ model.load_state_dict(torch.load(snapshot,
 model.eval().to(device)
 tracker = build_tracker(model)
 
-for i, video in enumerate(video_list):
-    # 映像ファイルを読み込む
-    video_frames = []
-    cap = cv2.VideoCapture(video)
-    w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-    h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-    while(True):
-        ret, img = cap.read()
-        if not ret:
-            break
-        video_frames.append(img)
-    cap.release()
+for class_index, videos in enumerate(video_list):
+    for video_index, video in enumerate(videos):
+        # 映像ファイルを読み込む
+        video_frames = []
+        cap = cv2.VideoCapture(video)
+        w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        while(True):
+            ret, img = cap.read()
+            if not ret:
+                break
+            video_frames.append(img)
+        cap.release()
 
-    #トラッキングを実行
-    jpeg_filenames_list = []
+        #トラッキングを実行
+        for ind, frame in enumerate(video_frames):
+            if ind == 0:
+                tracker.init(frame, init_rect_list[class_index][video_index])
+                bbox = init_rect_list[class_index][video_index]
+            else:
+                outputs = tracker.track(frame)
+                bbox = outputs['bbox']
+                
+            filename = '%d_%d_%06d'%(class_index, video_index,ind)
 
-    for ind, frame in enumerate(video_frames):
-        if ind == 0:
-            tracker.init(frame, init_rect_list[i])
-            bbox = init_rect_list[i]
-        else:
-            outputs = tracker.track(frame)
-            bbox = outputs['bbox']
-            
-        filename = '%d%06d'%((i+1),ind)
+            #画像の保存
+            jpeg_filename = filename + '.jpg'
+            cv2.imwrite(os.path.join(train_images_dir, jpeg_filename), frame)
 
-        #画像の保存
-        jpeg_filename = filename + '.jpg'
-        cv2.imwrite(os.path.join(train_images_dir, jpeg_filename), frame)
-
-        #ラベルテキストの保存
-        txt_filename= filename + '.txt'
-        with open(os.path.join(train_labels_dir, txt_filename), 'w') as f:
-            center_x = (bbox[0] + bbox[2] / 2) / w
-            center_y = (bbox[1] + bbox[3] / 2) / h
-            width = bbox[2] / w
-            height = bbox[3] / h
-            f.write('%d %f %f %f %f'%(i, center_x, center_y, width, height))
+            #ラベルテキストの保存
+            txt_filename= filename + '.txt'
+            with open(os.path.join(train_labels_dir, txt_filename), 'w') as f:
+                center_x = (bbox[0] + bbox[2] / 2) / w
+                center_y = (bbox[1] + bbox[3] / 2) / h
+                width = bbox[2] / w
+                height = bbox[3] / h
+                f.write('%d %f %f %f %f'%(i, center_x, center_y, width, height))
 
 with open('train.yaml', 'w', encoding='cp932') as f:
     f.write('path: %s'%out_path)
@@ -102,7 +126,7 @@ with open('train.yaml', 'w', encoding='cp932') as f:
     f.write('\n')
     f.write('val: images/train')
     f.write('\n')
-    f.write('nc: %d'%len(video_list))
+    f.write('nc: %d'%len(target_name))
     f.write('\n')
     f.write('names: ')
     f.write('[')
