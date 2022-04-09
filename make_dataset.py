@@ -117,7 +117,7 @@ for class_index, videos in enumerate(video_list):
                 center_y = (bbox[1] + bbox[3] / 2) / h
                 width = bbox[2] / w
                 height = bbox[3] / h
-                f.write('%d %f %f %f %f'%(i, center_x, center_y, width, height))
+                f.write('%d %f %f %f %f'%(class_index, center_x, center_y, width, height))
 
 with open('train.yaml', 'w', encoding='cp932') as f:
     f.write('path: %s'%out_path)
