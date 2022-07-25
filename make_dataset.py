@@ -120,11 +120,11 @@ for class_index, videos in enumerate(video_list):
                 f.write('%d %f %f %f %f'%(class_index, center_x, center_y, width, height))
 
 with open('train.yaml', 'w', encoding='cp932') as f:
-    f.write('path: %s'%out_path)
+    #f.write('path: %s'%out_path)
+    #f.write('\n')
+    f.write(f'train: {out_path}/images/train')
     f.write('\n')
-    f.write('train: images/train')
-    f.write('\n')
-    f.write('val: images/train')
+    f.write(f'val: {out_path}/images/train')
     f.write('\n')
     f.write('nc: %d'%len(target_name))
     f.write('\n')
