@@ -19,7 +19,7 @@ if not os.path.isfile(pth_file):
 argv_list = sys.argv
 del argv_list[0]
 
-class_num = len(sys.argv)
+class_num = len(argv_list)
 
 print('class count = %d'%class_num)
 
